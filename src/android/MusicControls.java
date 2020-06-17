@@ -85,7 +85,7 @@ public class MusicControls extends CordovaPlugin {
 
 	public void destroyPlayerNotification(){
 		this.notification.destroy();
-		this.mediaSessionCompat.release()
+		this.mediaSessionCompat.release();
 	}
 
 	@Override
@@ -194,7 +194,7 @@ public class MusicControls extends CordovaPlugin {
 		}
 		else if (action.equals("destroy")){
 			this.notification.destroy();
-			this.mediaSessionCompat.release()
+			this.mediaSessionCompat.release();
 			this.mMessageReceiver.stopListening();
 			callbackContext.success("success");
 		}
@@ -213,7 +213,7 @@ public class MusicControls extends CordovaPlugin {
 	@Override
 	public void onDestroy() {
 		this.notification.destroy();
-		this.mediaSessionCompat.release()
+		this.mediaSessionCompat.release();
 		this.mMessageReceiver.stopListening();
 		this.unregisterMediaButtonEvent();
 		super.onDestroy();
