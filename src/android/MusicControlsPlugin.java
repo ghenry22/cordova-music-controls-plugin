@@ -28,6 +28,7 @@ public class MusicControlsPlugin extends CordovaPlugin {
     private MusicControlsNotification notification;
     private MediaSessionCompat mediaSessionCompat;
     private PendingIntent mediaButtonPendingIntent;
+    private long playbackPosition = PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN;
 
     private final MediaSessionCallback mMediaSessionCallback = new MediaSessionCallback();
 
@@ -63,7 +64,6 @@ public class MusicControlsPlugin extends CordovaPlugin {
             public void onServiceConnected(ComponentName className, IBinder binder) {
                 ((MusicControlsNotificationKillerService.KillBinder) binder)
                     .getService()
-                    .getApplicationContext()
                     .startService(new Intent(activity, MusicControlsNotificationKillerService.class));
             }
 
@@ -99,6 +99,13 @@ public class MusicControlsPlugin extends CordovaPlugin {
                             metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, art);
                             metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, art);
                         }
+                    }
+
+                    if (infos.hasScrubber) {
+                        metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, infos.duration);
+                        playbackPosition = infos.elapsed;
+                    } else {
+                        playbackPosition = PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN;
                     }
 
                     mediaSessionCompat.setMetadata(metadataBuilder.build());
@@ -143,6 +150,16 @@ public class MusicControlsPlugin extends CordovaPlugin {
                     mMessageReceiver.setCallback(callbackContext);
                 });
                 break;
+            case "updateElapsed":
+                final JSONObject params = args.getJSONObject(0);
+                playbackPosition = params.getLong("elapsed");
+                final boolean isPlaying = params.getBoolean("isPlaying");
+                if (isPlaying)
+                    setMediaPlaybackState(PlaybackStateCompat.STATE_PLAYING);
+                else
+                    setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED);
+                callbackContext.success("success");
+                break;
         }
         return true;
     }
@@ -183,29 +200,27 @@ public class MusicControlsPlugin extends CordovaPlugin {
     }
 
     private void setMediaPlaybackState(int state) {
-        PlaybackStateCompat.Builder playbackstateBuilder = new PlaybackStateCompat.Builder();
+        long actions = PlaybackStateCompat.ACTION_PLAY_PAUSE |
+            PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
+            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
+            PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID |
+            PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH;
+
         if (state == PlaybackStateCompat.STATE_PLAYING) {
-            playbackstateBuilder.setActions(
-                PlaybackStateCompat.ACTION_PLAY_PAUSE |
-                    PlaybackStateCompat.ACTION_PAUSE |
-                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
-                    PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
-                    PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID |
-                    PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
-            );
-            playbackstateBuilder.setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f);
+            actions |= PlaybackStateCompat.ACTION_PAUSE;
         } else {
-            playbackstateBuilder.setActions(
-                PlaybackStateCompat.ACTION_PLAY_PAUSE |
-                    PlaybackStateCompat.ACTION_PLAY |
-                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
-                    PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
-                    PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID |
-                    PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH
-            );
-            playbackstateBuilder.setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 0);
+            actions |= PlaybackStateCompat.ACTION_PLAY;
         }
-        mediaSessionCompat.setPlaybackState(playbackstateBuilder.build());
+
+        if (playbackPosition != PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN) {
+            actions |= PlaybackStateCompat.ACTION_SEEK_TO;
+        }
+
+        PlaybackStateCompat playbackState = new PlaybackStateCompat.Builder()
+            .setActions(actions)
+            .setState(state, playbackPosition, 1.0f)
+            .build();
+        mediaSessionCompat.setPlaybackState(playbackState);
     }
 
     private void cleanUp() {

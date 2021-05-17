@@ -47,6 +47,7 @@
 		<source-file src="src/android/MusicControlsInfoModel.java" target-dir="src/com/homerours/musiccontrols" />
 		<source-file src="src/android/MusicControlsNotification.java" target-dir="src/com/homerours/musiccontrols" />
 		<source-file src="src/android/MusicControlsNotificationKillerService.java" target-dir="src/com/homerours/musiccontrols" />
+		<resource-file src="src/android/notification_title.xml" target="res/layout/notification_title.xml" />
 	</platform>
 
 	<!-- windows -->

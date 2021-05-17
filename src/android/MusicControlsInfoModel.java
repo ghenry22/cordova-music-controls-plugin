@@ -21,6 +21,9 @@ public class MusicControlsInfoModel {
     public String nextIcon;
     public String closeIcon;
     public String notificationIcon;
+    public boolean hasScrubber;
+    public long duration;
+    public long elapsed;
 
     public MusicControlsInfoModel(JSONArray args) throws JSONException {
         final JSONObject params = args.getJSONObject(0);
@@ -41,5 +44,8 @@ public class MusicControlsInfoModel {
         this.nextIcon = params.getString("nextIcon");
         this.closeIcon = params.getString("closeIcon");
         this.notificationIcon = params.getString("notificationIcon");
+        this.hasScrubber = params.getBoolean("hasScrubbing");
+        this.duration = params.getLong("duration");
+        this.elapsed = params.getLong("elapsed");
     }
 }

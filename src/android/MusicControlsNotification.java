@@ -10,8 +10,12 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Build;
 import android.support.v4.media.session.MediaSessionCompat;
+import android.view.View;
+import android.widget.RemoteViews;
 
 import androidx.core.app.NotificationCompat;
+
+import dev.luisramos.phoenix.musicplayer.R;
 
 public class MusicControlsNotification {
     private static final String CHANNEL_ID = "cordova-music-channel-id";
@@ -71,11 +75,15 @@ public class MusicControlsNotification {
     private Notification buildNotification() {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID);
 
-        //Configure builder
-        builder.setContentTitle(infos.track);
-        if (!infos.artist.isEmpty()) {
-            builder.setContentText(infos.artist);
+        RemoteViews content = new RemoteViews(context.getPackageName(), R.layout.notification_title);
+        content.setTextViewText(R.id.notification_title, infos.track);
+        if (infos.artist != null && !infos.artist.isEmpty()) {
+            content.setTextViewText(R.id.notification_subtitle, infos.artist);
+        } else {
+            content.setViewVisibility(R.id.notification_subtitle, View.GONE);
         }
+        builder.setContent(content);
+
         builder.setWhen(0);
 
         // set if the notification can be destroyed by swiping

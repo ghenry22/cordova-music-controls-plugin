@@ -1,7 +1,6 @@
 package com.homerours.musiccontrols;
 
 import android.content.Intent;
-import android.os.Bundle;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.view.KeyEvent;
 
@@ -37,6 +36,18 @@ public class MediaSessionCallback extends MediaSessionCompat.Callback {
     public void onSkipToPrevious() {
         super.onSkipToPrevious();
         sendMessage("music-controls-media-button-previous");
+    }
+
+    @Override
+    public void onSeekTo(long pos) {
+        super.onSeekTo(pos);
+        if (this.cb != null) {
+            this.cb.success("{" +
+                "\"message\": \"music-controls-seek-to\"," +
+                "\"position\": " + pos +
+                "}");
+            this.cb = null;
+        }
     }
 
     @Override
