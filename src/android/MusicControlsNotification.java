@@ -1,6 +1,5 @@
 package com.homerours.musiccontrols;
 
-
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -75,7 +74,8 @@ public class MusicControlsNotification {
     private Notification buildNotification() {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID);
 
-        RemoteViews content = new RemoteViews(context.getPackageName(), R.layout.notification_title);
+        int layoutId = context.getResources().getIdentifier("notification_title", "layout", context.getPackageName());
+        RemoteViews content = new RemoteViews(context.getPackageName(), layoutId);
         content.setTextViewText(R.id.notification_title, infos.track);
         if (infos.artist != null && !infos.artist.isEmpty()) {
             content.setTextViewText(R.id.notification_subtitle, infos.artist);
