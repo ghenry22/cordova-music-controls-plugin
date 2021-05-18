@@ -18,8 +18,8 @@
 @property NSString * album;
 @property NSString * ticker;
 @property NSString * cover;
-@property NSUInteger duration;
-@property NSUInteger elapsed;
+@property double duration;
+@property double elapsed;
 @property bool isPlaying;
 @property bool hasPrev;
 @property bool hasNext;

@@ -4,8 +4,7 @@
 //
 //  Created by Juan Gonzalez on 12/16/16.
 //  Updated by Gaven Henry on 11/7/17 for iOS 11 compatibility & new features
-//  Updated by Eugene Cross on 14/10/19 for iOS 13 compatibility
-//
+//  Updated by Leo Schubert 11/25/17 for making the plugin work without a category of MainViewController + adding the getInfo call
 //
 
 #import "MusicControls.h"
@@ -15,6 +14,10 @@
 MusicControlsInfo * musicControlsSettings;
 
 @implementation MusicControls
+- (void) setObject:(NSObject*)obj inDict:(NSMutableDictionary*)dict forKey:(id<NSCopying>)key {
+    if (obj==nil) {return;}
+    [dict setObject:obj forKey:key];
+}
 
 - (void) create: (CDVInvokedUrlCommand *) command {
     NSDictionary * musicControlsInfoDict = [command.arguments objectAtIndex:0];
@@ -31,32 +34,74 @@ MusicControlsInfo * musicControlsSettings;
         NSMutableDictionary * updatedNowPlayingInfo = [NSMutableDictionary dictionaryWithDictionary:nowPlayingInfo];
         
         MPMediaItemArtwork * mediaItemArtwork = [self createCoverArtwork:[musicControlsInfo cover]];
-        NSNumber * duration = [NSNumber numberWithInt:[musicControlsInfo duration]];
-        NSNumber * elapsed = [NSNumber numberWithInt:[musicControlsInfo elapsed]];
-        NSNumber * playbackRate = [NSNumber numberWithBool:[musicControlsInfo isPlaying]];
+        NSNumber * duration = [NSNumber numberWithDouble:[musicControlsInfo duration]];
+        NSNumber * elapsed = [NSNumber numberWithDouble:[musicControlsInfo elapsed]];
+        NSNumber * playbackRate = musicControlsInfo.isPlaying ? @(1.0) : @(0.0);
         
         if (mediaItemArtwork != nil) {
             [updatedNowPlayingInfo setObject:mediaItemArtwork forKey:MPMediaItemPropertyArtwork];
         }
-        
-        [updatedNowPlayingInfo setObject:[musicControlsInfo artist] forKey:MPMediaItemPropertyArtist];
-        [updatedNowPlayingInfo setObject:[musicControlsInfo track] forKey:MPMediaItemPropertyTitle];
-        [updatedNowPlayingInfo setObject:[musicControlsInfo album] forKey:MPMediaItemPropertyAlbumTitle];
-        [updatedNowPlayingInfo setObject:duration forKey:MPMediaItemPropertyPlaybackDuration];
-        [updatedNowPlayingInfo setObject:elapsed forKey:MPNowPlayingInfoPropertyElapsedPlaybackTime];
+        [self setObject:musicControlsInfo.artist inDict:updatedNowPlayingInfo forKey:MPMediaItemPropertyArtist];
+        [self setObject:musicControlsInfo.track inDict:updatedNowPlayingInfo forKey:MPMediaItemPropertyTitle];
+        [self setObject:musicControlsInfo.album inDict:updatedNowPlayingInfo forKey:MPMediaItemPropertyAlbumTitle];
+        [self setObject:duration inDict:updatedNowPlayingInfo forKey:MPMediaItemPropertyPlaybackDuration];
+        [self setObject:elapsed inDict:updatedNowPlayingInfo forKey:MPNowPlayingInfoPropertyElapsedPlaybackTime];
         [updatedNowPlayingInfo setObject:playbackRate forKey:MPNowPlayingInfoPropertyPlaybackRate];
         
         nowPlayingInfoCenter.nowPlayingInfo = updatedNowPlayingInfo;
     }];
+}
 
-    [self registerMusicControlsEventListener];
+//everything except artwork is converted back
+- (void) getInfo: (CDVInvokedUrlCommand *) command {
+    MPNowPlayingInfoCenter * center =  [MPNowPlayingInfoCenter defaultCenter];
+    NSDictionary * info = center.nowPlayingInfo;
+    NSMutableDictionary* outDict = [NSMutableDictionary dictionary];
+    for(NSString* key in info) {
+        NSObject* val=info[key];
+        if (key==MPMediaItemPropertyArtwork) { //Artwork not JSON compatible
+            continue;
+        } else if (key==MPNowPlayingInfoPropertyElapsedPlaybackTime) {
+            outDict[@"elapsed"]=val;
+        } else if (key==MPMediaItemPropertyPlaybackDuration) {
+            outDict[@"duration"]=val;
+        } else if (key==MPMediaItemPropertyArtist) {
+            outDict[@"artist"]=val;
+        } else if (key==MPMediaItemPropertyTitle) {
+            outDict[@"track"]=val;
+        } else if (key==MPMediaItemPropertyAlbumTitle) {
+            outDict[@"album"]=val;
+        } else if (key==MPMediaItemPropertyAlbumArtist) {
+            outDict[@"albumArtist"]=val;
+        } else if (key==MPMediaItemPropertyComposer) {
+            outDict[@"composer"]=val;
+        } else if (key==MPMediaItemPropertyGenre) {
+            outDict[@"genre"]=val;
+        } else {
+            NSInteger len=0;
+            if ([key hasPrefix:@"MPNowPlayingInfoProperty"]) {
+                len=@"MPNowPlayingInfoProperty".length;
+            } else if ([key hasPrefix:@"MPMediaItemProperty"]) {
+                len=@"MPMediaItemProperty".length;
+            }
+            if (len>0) { //cut the MP... apple prefixes
+                NSString *first=[[key substringWithRange:NSMakeRange(len,1)] lowercaseString];
+                NSString* newkey=[first stringByAppendingString:[key substringFromIndex:len+1]];
+                outDict[newkey]=val;
+            } else {
+                outDict[key]=val;
+            }
+        }
+    }
+    CDVPluginResult * pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:outDict];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void) updateIsPlaying: (CDVInvokedUrlCommand *) command {
     NSDictionary * musicControlsInfoDict = [command.arguments objectAtIndex:0];
     MusicControlsInfo * musicControlsInfo = [[MusicControlsInfo alloc] initWithDictionary:musicControlsInfoDict];
     NSNumber * elapsed = [NSNumber numberWithDouble:[musicControlsInfo elapsed]];
-    NSNumber * playbackRate = [NSNumber numberWithBool:[musicControlsInfo isPlaying]];
+    NSNumber * playbackRate = musicControlsInfo.isPlaying ? @(1.0) : @(0.0);
     
     if (!NSClassFromString(@"MPNowPlayingInfoCenter")) {
         return;
@@ -81,6 +126,7 @@ MusicControlsInfo * musicControlsSettings;
 }
 
 - (void) watch: (CDVInvokedUrlCommand *) command {
+    [self registerMusicControlsEventListener];
     [self setLatestEventCallbackId:command.callbackId];
 }
 
@@ -132,187 +178,108 @@ MusicControlsInfo * musicControlsSettings;
     return MPRemoteCommandHandlerStatusSuccess;
 }
 
-//Handle the skip forward event
-- (MPRemoteCommandHandlerStatus) skipForwardEvent:(MPSkipIntervalCommandEvent *)event {
-    NSString * action = @"music-controls-skip-forward";
+- (void)sendPluginAction:(NSString*)action
+{
     NSString * jsonAction = [NSString stringWithFormat:@"{\"message\":\"%@\"}", action];
     CDVPluginResult * pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonAction];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:[self latestEventCallbackId]];
-    return MPRemoteCommandHandlerStatusSuccess;
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:self.latestEventCallbackId];
+}
+
+//Handle the skip forward event
+- (void) skipForwardEvent:(MPSkipIntervalCommandEvent *)event {
+    [self sendPluginAction:@"music-controls-skip-forward"];
 }
 
 //Handle the skip backward event
-- (MPRemoteCommandHandlerStatus) skipBackwardEvent:(MPSkipIntervalCommandEvent *)event {
-    NSString * action = @"music-controls-skip-backward";
-    NSString * jsonAction = [NSString stringWithFormat:@"{\"message\":\"%@\"}", action];
-    CDVPluginResult * pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonAction];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:[self latestEventCallbackId]];
-    return MPRemoteCommandHandlerStatusSuccess;
+- (void) skipBackwardEvent:(MPSkipIntervalCommandEvent *)event {
+    [self sendPluginAction:@"music-controls-skip-backward"];
 }
 
-//If MPRemoteCommandCenter is enabled for any function we must enable it for all and register a handler
-//So if we want to use the new scrubbing support in the lock screen we must implement dummy handlers
-//for those functions that we already deal with through notifications (play, pause, skip etc)
-//otherwise those remote control actions will be disabled
+//Handler for the common actions
 - (MPRemoteCommandHandlerStatus) remoteEvent:(MPRemoteCommandEvent *)event {
-    return MPRemoteCommandHandlerStatusSuccess;
-}
-
-- (MPRemoteCommandHandlerStatus) nextTrackEvent:(MPRemoteCommandEvent *)event {
-    NSString * action = @"music-controls-next";
-    NSString * jsonAction = [NSString stringWithFormat:@"{\"message\":\"%@\"}", action];
-    CDVPluginResult * pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonAction];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:[self latestEventCallbackId]];
-    return MPRemoteCommandHandlerStatusSuccess;
-}
-
-- (MPRemoteCommandHandlerStatus) prevTrackEvent:(MPRemoteCommandEvent *)event {
-    NSString * action = @"music-controls-previous";
-    NSString * jsonAction = [NSString stringWithFormat:@"{\"message\":\"%@\"}", action];
-    CDVPluginResult * pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonAction];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:[self latestEventCallbackId]];
-    return MPRemoteCommandHandlerStatusSuccess;
-
-}
-
-- (MPRemoteCommandHandlerStatus) pauseEvent:(MPRemoteCommandEvent *)event {
-    NSString * action = @"music-controls-pause";
-    NSString * jsonAction = [NSString stringWithFormat:@"{\"message\":\"%@\"}", action];
-    CDVPluginResult * pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonAction];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:[self latestEventCallbackId]];
-    return MPRemoteCommandHandlerStatusSuccess;
-
-}
-
-- (MPRemoteCommandHandlerStatus) playEvent:(MPRemoteCommandEvent *)event {
-    NSString * action = @"music-controls-play";
-    NSString * jsonAction = [NSString stringWithFormat:@"{\"message\":\"%@\"}", action];
-    CDVPluginResult * pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonAction];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:[self latestEventCallbackId]];
-    return MPRemoteCommandHandlerStatusSuccess;
-
-}
-
-//Handle all other remote control events
-- (void) handleMusicControlsNotification: (NSNotification *) notification {
-    UIEvent * receivedEvent = notification.object;
-    
-    if ([self latestEventCallbackId] == nil) {
-        return;
+    MPRemoteCommandCenter *center = [MPRemoteCommandCenter sharedCommandCenter];
+    NSString * action= nil ;
+    MPRemoteCommand* cmd=event.command;
+    if (center.playCommand==cmd) {
+        action = @"music-controls-play";
+    } else if (center.pauseCommand==cmd) {
+        action = @"music-controls-pause";
+    } else if (center.stopCommand==cmd) {
+        action = @"music-controls-destroy";
+    } else if (center.nextTrackCommand==cmd) {
+        action = @"music-controls-next";
+    } else if (center.previousTrackCommand==cmd) {
+        action = @"music-controls-previous";
+    } else if (center.togglePlayPauseCommand==cmd) {
+        action = @"music-controls-toggle-play-pause";
     }
-    
-    if (receivedEvent.type == UIEventTypeRemoteControl) {
-        NSString * action;
-        
-        switch (receivedEvent.subtype) {
-            case UIEventSubtypeRemoteControlTogglePlayPause:
-                action = @"music-controls-toggle-play-pause";
-                break;
-                
-            case UIEventSubtypeRemoteControlPlay:
-                action = @"music-controls-play";
-                break;
-                
-            case UIEventSubtypeRemoteControlPause:
-                action = @"music-controls-pause";
-                break;
-                
-            case UIEventSubtypeRemoteControlPreviousTrack:
-                action = @"music-controls-previous";
-                break;
-                
-            case UIEventSubtypeRemoteControlNextTrack:
-                action = @"music-controls-next";
-                break;
-                
-            case UIEventSubtypeRemoteControlStop:
-                action = @"music-controls-destroy";
-                break;
-                
-            default:
-                action = nil;
-                break;
-        }
-        
-        if(action == nil){
-            return;
-        }
-        
-        NSString * jsonAction = [NSString stringWithFormat:@"{\"message\":\"%@\"}", action];
-        CDVPluginResult * pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonAction];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:[self latestEventCallbackId]];
+    if(action != nil && self.latestEventCallbackId!=nil){
+        [self sendPluginAction:action];
     }
+    return MPRemoteCommandHandlerStatusSuccess;
 }
 
 //There are only 3 button slots available so next/prev track and skip forward/back cannot both be enabled
 //skip forward/back will take precedence if both are enabled
 - (void) registerMusicControlsEventListener {
-    [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleMusicControlsNotification:) name:@"musicControlsEventNotification" object:nil];
-    
+    if (_didRegister) {
+        return;
+    }
+    _didRegister = true;
     //register required event handlers for standard controls
     MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
     [commandCenter.playCommand setEnabled:true];
-    [commandCenter.playCommand addTarget:self action:@selector(playEvent:)];
+    [commandCenter.playCommand addTarget:self action:@selector(remoteEvent:)];
     [commandCenter.pauseCommand setEnabled:true];
-    [commandCenter.pauseCommand addTarget:self action:@selector(pauseEvent:)];
+    [commandCenter.pauseCommand addTarget:self action:@selector(remoteEvent:)];
+    [commandCenter.stopCommand setEnabled:true];
+    [commandCenter.stopCommand addTarget:self action:@selector(remoteEvent:)];
+    [commandCenter.togglePlayPauseCommand setEnabled:true];
+    [commandCenter.togglePlayPauseCommand addTarget:self action:@selector(remoteEvent:)];
     if(musicControlsSettings.hasNext){
         [commandCenter.nextTrackCommand setEnabled:true];
-        [commandCenter.nextTrackCommand addTarget:self action:@selector(nextTrackEvent:)];
+        [commandCenter.nextTrackCommand addTarget:self action:@selector(remoteEvent:)];
     }
     if(musicControlsSettings.hasPrev){
         [commandCenter.previousTrackCommand setEnabled:true];
-        [commandCenter.previousTrackCommand addTarget:self action:@selector(prevTrackEvent:)];
+        [commandCenter.previousTrackCommand addTarget:self action:@selector(remoteEvent:)];
     }
-
+    
     //Some functions are not available in earlier versions
-    if(floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_9_0){
-        if(musicControlsSettings.hasSkipForward){
-            commandCenter.skipForwardCommand.preferredIntervals = @[@(musicControlsSettings.skipForwardInterval)];
-            [commandCenter.skipForwardCommand setEnabled:true];
-            [commandCenter.skipForwardCommand addTarget: self action:@selector(skipForwardEvent:)];
-        } else {
-            if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_9_0) {
-                [commandCenter.skipForwardCommand removeTarget:self];
-            }
-        }
-        if(musicControlsSettings.hasSkipBackward){
-            commandCenter.skipBackwardCommand.preferredIntervals = @[@(musicControlsSettings.skipBackwardInterval)];
-            [commandCenter.skipBackwardCommand setEnabled:true];
-            [commandCenter.skipBackwardCommand addTarget: self action:@selector(skipBackwardEvent:)];
-        } else {
-            if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_9_0) {
-                [commandCenter.skipBackwardCommand removeTarget:self];
-            }
-        }
-        if(musicControlsSettings.hasScrubbing){
-            [commandCenter.changePlaybackPositionCommand setEnabled:true];
-            [commandCenter.changePlaybackPositionCommand addTarget:self action:@selector(changedThumbSliderOnLockScreen:)];
-        } else {
-            if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_9_0) {
-                [commandCenter.changePlaybackPositionCommand setEnabled:false];
-                [commandCenter.changePlaybackPositionCommand removeTarget:self action:NULL];
-            }
-        }
+    if(musicControlsSettings.hasSkipForward){
+        commandCenter.skipForwardCommand.preferredIntervals = @[@(musicControlsSettings.skipForwardInterval)];
+        [commandCenter.skipForwardCommand setEnabled:true];
+        [commandCenter.skipForwardCommand addTarget: self action:@selector(skipForwardEvent:)];
+    }
+    if(musicControlsSettings.hasSkipBackward){
+        commandCenter.skipBackwardCommand.preferredIntervals = @[@(musicControlsSettings.skipBackwardInterval)];
+        [commandCenter.skipBackwardCommand setEnabled:true];
+        [commandCenter.skipBackwardCommand addTarget: self action:@selector(skipBackwardEvent:)];
+    }
+    if(musicControlsSettings.hasScrubbing){
+        [commandCenter.changePlaybackPositionCommand setEnabled:true];
+        [commandCenter.changePlaybackPositionCommand addTarget:self action:@selector(changedThumbSliderOnLockScreen:)];
     }
 }
 
 - (void) deregisterMusicControlsEventListener {
-    [[UIApplication sharedApplication] endReceivingRemoteControlEvents];
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"receivedEvent" object:nil];
-    
+    if (!_didRegister) {
+        return;
+    }
     MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+    [commandCenter.playCommand removeTarget:self];
+    [commandCenter.pauseCommand removeTarget:self];
+    [commandCenter.stopCommand removeTarget:self];
+    [commandCenter.togglePlayPauseCommand removeTarget:self];
     [commandCenter.nextTrackCommand removeTarget:self];
     [commandCenter.previousTrackCommand removeTarget:self];
-    
-    if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_9_0) {
-        [commandCenter.changePlaybackPositionCommand setEnabled:false];
-        [commandCenter.changePlaybackPositionCommand removeTarget:self action:NULL];
-        [commandCenter.skipForwardCommand removeTarget:self];
-        [commandCenter.skipBackwardCommand removeTarget:self];
-    }
+    [commandCenter.changePlaybackPositionCommand setEnabled:false];
+    [commandCenter.changePlaybackPositionCommand removeTarget:self action:NULL];
+    [commandCenter.skipForwardCommand removeTarget:self];
+    [commandCenter.skipBackwardCommand removeTarget:self];
     
     [self setLatestEventCallbackId:nil];
+    _didRegister=false;
 }
 
 - (void) dealloc {

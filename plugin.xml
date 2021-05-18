@@ -63,8 +63,6 @@
 				<param name="ios-package" value="MusicControls" />
 			</feature>
 		</config-file>
-		<header-file src="src/ios/MainViewController+MusicControls.h" />
-		<source-file src="src/ios/MainViewController+MusicControls.m" />
 		<header-file src="src/ios/MusicControls.h" />
 		<source-file src="src/ios/MusicControls.m" />
 		<header-file src="src/ios/MusicControlsInfo.h" />

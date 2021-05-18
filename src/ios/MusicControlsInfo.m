@@ -18,8 +18,8 @@
         [self setAlbum: [dictionary objectForKey:@"album"]];
         [self setTicker: [dictionary objectForKey:@"ticker"]];
         [self setCover: [dictionary objectForKey:@"cover"]];
-        [self setDuration: [[dictionary objectForKey:@"duration"] integerValue]];
-        [self setElapsed: [[dictionary objectForKey:@"elapsed"] integerValue]];
+        [self setDuration: [[dictionary objectForKey:@"duration"] doubleValue]];
+        [self setElapsed: [[dictionary objectForKey:@"elapsed"] doubleValue]];
         [self setIsPlaying: [[dictionary objectForKey:@"isPlaying"] boolValue]];
         [self setHasPrev: [[dictionary objectForKey:@"hasPrev"] boolValue]];
         [self setHasNext: [[dictionary objectForKey:@"hasNext"] boolValue]];
