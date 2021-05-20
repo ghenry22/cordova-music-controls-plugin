@@ -14,8 +14,6 @@ import android.widget.RemoteViews;
 
 import androidx.core.app.NotificationCompat;
 
-import dev.luisramos.phoenix.musicplayer.R;
-
 public class MusicControlsNotification {
     private static final String CHANNEL_ID = "cordova-music-channel-id";
 
@@ -75,12 +73,14 @@ public class MusicControlsNotification {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID);
 
         int layoutId = context.getResources().getIdentifier("notification_title", "layout", context.getPackageName());
+        int notificationTitleId = context.getResources().getIdentifier("notification_title", "id", context.getPackageName());
+        int notificationSubtitleId = context.getResources().getIdentifier("notification_title", "id", context.getPackageName());
         RemoteViews content = new RemoteViews(context.getPackageName(), layoutId);
-        content.setTextViewText(R.id.notification_title, infos.track);
+        content.setTextViewText(notificationTitleId, infos.track);
         if (infos.artist != null && !infos.artist.isEmpty()) {
-            content.setTextViewText(R.id.notification_subtitle, infos.artist);
+            content.setTextViewText(notificationSubtitleId, infos.artist);
         } else {
-            content.setViewVisibility(R.id.notification_subtitle, View.GONE);
+            content.setViewVisibility(notificationSubtitleId, View.GONE);
         }
         builder.setContent(content);
 
