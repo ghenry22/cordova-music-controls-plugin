@@ -26,6 +26,12 @@ public class MusicControlsService extends Service {
         return START_STICKY;
     }
 
+    @Override
+    public void onDestroy() {
+        stop();
+        super.onDestroy();
+    }
+
     public void start(int notificationId, Notification notification) {
         startForeground(notificationId, notification);
 

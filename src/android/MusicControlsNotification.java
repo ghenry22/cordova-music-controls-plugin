@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.os.Build;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.view.View;
@@ -24,11 +25,11 @@ public class MusicControlsNotification {
     private Bitmap bitmapCover;
     private final MediaSessionCompat.Token mediaSession;
 
-    public MusicControlsNotification(Context context, int id, MediaSessionCompat.Token mediaSesion) {
+    public MusicControlsNotification(Context context, int id, MediaSessionCompat.Token token) {
         this.notificationID = id;
         this.context = context;
         this.notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        this.mediaSession = mediaSesion;
+        this.mediaSession = token;
 
         // use channelid for Oreo and higher
         if (Build.VERSION.SDK_INT >= 26) {
@@ -82,7 +83,7 @@ public class MusicControlsNotification {
         } else {
             content.setViewVisibility(notificationSubtitleId, View.GONE);
         }
-        builder.setContent(content);
+        builder.setCustomContentView(content);
 
         builder.setWhen(0);
 
@@ -140,34 +141,34 @@ public class MusicControlsNotification {
             nbControls++;
             Intent previousIntent = new Intent("music-controls-previous");
             PendingIntent previousPendingIntent = PendingIntent.getBroadcast(context, 1, previousIntent, 0);
-            builder.addAction(this.getResourceId(infos.prevIcon, android.R.drawable.ic_media_previous), "", previousPendingIntent);
+            builder.addAction(createAction(infos.prevIcon, android.R.drawable.ic_media_previous, previousPendingIntent));
         }
         if (infos.isPlaying) {
             /* Pause  */
             nbControls++;
             Intent pauseIntent = new Intent("music-controls-pause");
             PendingIntent pausePendingIntent = PendingIntent.getBroadcast(context, 1, pauseIntent, 0);
-            builder.addAction(this.getResourceId(infos.pauseIcon, android.R.drawable.ic_media_pause), "", pausePendingIntent);
+            builder.addAction(createAction(infos.pauseIcon, android.R.drawable.ic_media_pause, pausePendingIntent));
         } else {
             /* Play  */
             nbControls++;
             Intent playIntent = new Intent("music-controls-play");
             PendingIntent playPendingIntent = PendingIntent.getBroadcast(context, 1, playIntent, 0);
-            builder.addAction(this.getResourceId(infos.playIcon, android.R.drawable.ic_media_play), "", playPendingIntent);
+            builder.addAction(createAction(infos.playIcon, android.R.drawable.ic_media_play, playPendingIntent));
         }
         /* Next */
         if (infos.hasNext) {
             nbControls++;
             Intent nextIntent = new Intent("music-controls-next");
             PendingIntent nextPendingIntent = PendingIntent.getBroadcast(context, 1, nextIntent, 0);
-            builder.addAction(this.getResourceId(infos.nextIcon, android.R.drawable.ic_media_next), "", nextPendingIntent);
+            builder.addAction(createAction(infos.nextIcon, android.R.drawable.ic_media_next, nextPendingIntent));
         }
         /* Close */
         if (infos.hasClose) {
             nbControls++;
             Intent destroyIntent = new Intent("music-controls-destroy");
             PendingIntent destroyPendingIntent = PendingIntent.getBroadcast(context, 1, destroyIntent, 0);
-            builder.addAction(this.getResourceId(infos.closeIcon, android.R.drawable.ic_menu_close_clear_cancel), "", destroyPendingIntent);
+            builder.addAction(createAction(infos.closeIcon, android.R.drawable.ic_menu_close_clear_cancel, destroyPendingIntent));
         }
 
         int[] args = new int[nbControls];
@@ -175,6 +176,7 @@ public class MusicControlsNotification {
             args[i] = i;
         }
 
+        builder.setColorized(true);
         builder.setStyle(
             new androidx.media.app.NotificationCompat.DecoratedMediaCustomViewStyle()
                 .setMediaSession(mediaSession)
@@ -182,6 +184,11 @@ public class MusicControlsNotification {
         );
 
         return builder.build();
+    }
+
+    private NotificationCompat.Action createAction(String drawableRes, int fallbackRes, PendingIntent intent) {
+        int icon = getResourceId(drawableRes, fallbackRes);
+        return new NotificationCompat.Action(icon, "", intent);
     }
 
     private int getResourceId(String name, int fallback) {

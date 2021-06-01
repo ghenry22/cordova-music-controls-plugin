@@ -24,13 +24,13 @@ public class MusicControlsNotificationKillerService extends Service {
 
     @Override
     public void onDestroy() {
-        Log.d("YOYO", "DESTROY");
+        Log.d("MusicControls", "DESTROY");
         NotificationManagerCompat.from(this).cancelAll();
     }
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        Log.d("YOYO", "GONE");
+        Log.d("MusicControls", "GONE");
         NotificationManagerCompat.from(this).cancelAll();
     }
 
