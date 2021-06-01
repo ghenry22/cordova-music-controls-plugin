@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.graphics.Bitmap;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -28,9 +29,10 @@ public class MusicControlsPlugin extends CordovaPlugin {
     private MusicControlsNotification notification;
     private MediaSessionCompat mediaSessionCompat;
     private PendingIntent mediaButtonPendingIntent;
-    private long playbackPosition = PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN;
 
     private final MediaSessionCallback mMediaSessionCallback = new MediaSessionCallback();
+    private PlaybackStateCompat lastPlaybackState;
+    private boolean hasScrubber = false;
 
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
@@ -45,7 +47,7 @@ public class MusicControlsPlugin extends CordovaPlugin {
         mMessageReceiver = new MusicControlsBroadcastReceiver(this);
         registerBroadcaster(mMessageReceiver);
 
-        setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED);
+        setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN);
         mediaSessionCompat.setActive(true);
 
         mediaSessionCompat.setCallback(mMediaSessionCallback);
@@ -101,64 +103,72 @@ public class MusicControlsPlugin extends CordovaPlugin {
                         }
                     }
 
-                    if (infos.hasScrubber) {
+                    long playbackPosition = PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN;
+                    hasScrubber = infos.hasScrubber;
+                    if (hasScrubber) {
                         metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, infos.duration);
                         playbackPosition = infos.elapsed;
-                    } else {
-                        playbackPosition = PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN;
                     }
 
                     mediaSessionCompat.setMetadata(metadataBuilder.build());
 
                     if (infos.isPlaying)
-                        setMediaPlaybackState(PlaybackStateCompat.STATE_PLAYING);
+                        setMediaPlaybackState(PlaybackStateCompat.STATE_PLAYING, playbackPosition);
                     else
-                        setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED);
+                        setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED, playbackPosition);
 
                     callbackContext.success("success");
                 });
                 break;
-            case "updateIsPlaying": {
-                final JSONObject params = args.getJSONObject(0);
-                final boolean isPlaying = params.getBoolean("isPlaying");
-                notification.updateIsPlaying(isPlaying);
-
-                if (isPlaying)
-                    setMediaPlaybackState(PlaybackStateCompat.STATE_PLAYING);
-                else
-                    setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED);
-
-                callbackContext.success("success");
+            case "updateIsPlaying":
+                cordova.getThreadPool().execute(() -> {
+                    try {
+                        final JSONObject params = args.getJSONObject(0);
+                        final boolean isPlaying = params.getBoolean("isPlaying");
+                        updateNotification(isPlaying, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                        callbackContext.error(e.getLocalizedMessage());
+                    }
+                });
                 break;
-            }
-            case "updateDismissable": {
-                final JSONObject params = args.getJSONObject(0);
-                final boolean dismissable = params.getBoolean("dismissable");
-                notification.updateDismissable(dismissable);
-                callbackContext.success("success");
+            case "updateDismissable":
+                cordova.getThreadPool().execute(() -> {
+                    try {
+                        final JSONObject params = args.getJSONObject(0);
+                        final boolean dismissable = params.getBoolean("dismissable");
+                        notification.updateDismissable(dismissable);
+                        callbackContext.success("success");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                        callbackContext.error(e.getLocalizedMessage());
+                    }
+                });
                 break;
-            }
             case "destroy":
-                notification.destroy();
-                mMessageReceiver.stopListening();
+                cleanUp();
                 callbackContext.success("success");
                 break;
             case "watch":
-                registerMediaButtonEvent();
                 cordova.getThreadPool().execute(() -> {
+                    registerMediaButtonEvent();
                     mMediaSessionCallback.setCallback(callbackContext);
                     mMessageReceiver.setCallback(callbackContext);
                 });
                 break;
             case "updateElapsed":
-                final JSONObject params = args.getJSONObject(0);
-                playbackPosition = params.getLong("elapsed");
-                final boolean isPlaying = params.getBoolean("isPlaying");
-                if (isPlaying)
-                    setMediaPlaybackState(PlaybackStateCompat.STATE_PLAYING);
-                else
-                    setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED);
-                callbackContext.success("success");
+                cordova.getThreadPool().execute(() -> {
+                    try {
+                        final JSONObject params = args.getJSONObject(0);
+                        long playbackPosition = params.getLong("elapsed");
+                        final boolean isPlaying = params.getBoolean("isPlaying");
+                        updateNotification(isPlaying, playbackPosition);
+                        callbackContext.success("success");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                        callbackContext.error(e.getLocalizedMessage());
+                    }
+                });
                 break;
         }
         return true;
@@ -200,6 +210,10 @@ public class MusicControlsPlugin extends CordovaPlugin {
     }
 
     private void setMediaPlaybackState(int state) {
+        setMediaPlaybackState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN);
+    }
+
+    private void setMediaPlaybackState(int state, long playbackPosition) {
         long actions = PlaybackStateCompat.ACTION_PLAY_PAUSE |
             PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
@@ -212,8 +226,17 @@ public class MusicControlsPlugin extends CordovaPlugin {
             actions |= PlaybackStateCompat.ACTION_PLAY;
         }
 
-        if (playbackPosition != PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN) {
+        if (hasScrubber) {
             actions |= PlaybackStateCompat.ACTION_SEEK_TO;
+            // We only want to update
+            if (playbackPosition == PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN && lastPlaybackState != null) {
+                if (state == PlaybackStateCompat.STATE_PLAYING) {
+                    playbackPosition = lastPlaybackState.getPosition();
+                } else {
+                    long delta = SystemClock.elapsedRealtime() - lastPlaybackState.getLastPositionUpdateTime();
+                    playbackPosition = lastPlaybackState.getPosition() + delta;
+                }
+            }
         }
 
         PlaybackStateCompat playbackState = new PlaybackStateCompat.Builder()
@@ -221,6 +244,17 @@ public class MusicControlsPlugin extends CordovaPlugin {
             .setState(state, playbackPosition, 1.0f)
             .build();
         mediaSessionCompat.setPlaybackState(playbackState);
+        lastPlaybackState = playbackState;
+    }
+
+    private void updateNotification(boolean isPlaying, long playbackPosition) {
+        notification.updateIsPlaying(isPlaying);
+
+        if (isPlaying) {
+            setMediaPlaybackState(PlaybackStateCompat.STATE_PLAYING, playbackPosition);
+        } else {
+            setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED, playbackPosition);
+        }
     }
 
     private void cleanUp() {

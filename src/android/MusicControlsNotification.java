@@ -74,7 +74,7 @@ public class MusicControlsNotification {
 
         int layoutId = context.getResources().getIdentifier("notification_title", "layout", context.getPackageName());
         int notificationTitleId = context.getResources().getIdentifier("notification_title", "id", context.getPackageName());
-        int notificationSubtitleId = context.getResources().getIdentifier("notification_title", "id", context.getPackageName());
+        int notificationSubtitleId = context.getResources().getIdentifier("notification_subtitle", "id", context.getPackageName());
         RemoteViews content = new RemoteViews(context.getPackageName(), layoutId);
         content.setTextViewText(notificationTitleId, infos.track);
         if (infos.artist != null && !infos.artist.isEmpty()) {
@@ -101,7 +101,7 @@ public class MusicControlsNotification {
 
         builder.setPriority(Notification.PRIORITY_MAX);
 
-        builder.setVisibility(Notification.VISIBILITY_PUBLIC);
+        builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
         //Set SmallIcon
         boolean usePlayingIcon = infos.notificationIcon.isEmpty();

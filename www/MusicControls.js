@@ -49,8 +49,8 @@ var musicControls = {
       [
         {
           elapsed: args.elapsed,
-          isPlaying: args.isPlaying === undefined ? "" : !!args.isPlaying
-        }
+          isPlaying: args.isPlaying === undefined ? false : !!args.isPlaying,
+        },
       ]
     );
   },
