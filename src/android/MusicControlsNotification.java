@@ -69,7 +69,7 @@ public class MusicControlsNotification {
         this.notificationManager.notify(this.notificationID, notif);
     }
 
-    private Notification buildNotification() {
+    public Notification buildNotification() {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID);
 
         int layoutId = context.getResources().getIdentifier("notification_title", "layout", context.getPackageName());

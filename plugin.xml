@@ -36,6 +36,7 @@
 
 		<config-file target="AndroidManifest.xml" parent="/manifest/application">
 			<service android:name="com.homerours.musiccontrols.MusicControlsNotificationKillerService"></service>
+			<service android:name="com.homerours.musiccontrols.MusicControlsService"></service>
 		</config-file>
 
 		<framework src="com.android.support:support-v4:25.1.1" />
@@ -47,6 +48,7 @@
 		<source-file src="src/android/MusicControlsInfoModel.java" target-dir="src/com/homerours/musiccontrols" />
 		<source-file src="src/android/MusicControlsNotification.java" target-dir="src/com/homerours/musiccontrols" />
 		<source-file src="src/android/MusicControlsNotificationKillerService.java" target-dir="src/com/homerours/musiccontrols" />
+		<source-file src="src/android/MusicControlsService.java" target-dir="src/com/homerours/musiccontrols" />
 		<resource-file src="src/android/notification_title.xml" target="res/layout/notification_title.xml" />
 	</platform>
 

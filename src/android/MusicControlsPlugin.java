@@ -13,6 +13,7 @@ import android.os.SystemClock;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
+import android.view.View;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -33,6 +34,8 @@ public class MusicControlsPlugin extends CordovaPlugin {
     private final MediaSessionCallback mMediaSessionCallback = new MediaSessionCallback();
     private PlaybackStateCompat lastPlaybackState;
     private boolean hasScrubber = false;
+
+    private MusicControlsService.MusicControlsBinder binder;
 
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
@@ -74,6 +77,20 @@ public class MusicControlsPlugin extends CordovaPlugin {
         };
         Intent startServiceIntent = new Intent(activity, MusicControlsNotificationKillerService.class);
         activity.bindService(startServiceIntent, mConnection, Context.BIND_AUTO_CREATE);
+
+        ServiceConnection conn = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder binder) {
+                bindService(binder);
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+
+            }
+        };
+        Intent startForegroundIntent = new Intent(activity, MusicControlsService.class);
+        activity.bindService(startForegroundIntent, conn, Context.BIND_AUTO_CREATE);
     }
 
     @Override
@@ -174,9 +191,19 @@ public class MusicControlsPlugin extends CordovaPlugin {
         return true;
     }
 
+
+    @Override
+    public void onPause(boolean multitasking) {
+        super.onPause(multitasking);
+        if (lastPlaybackState.getState() == PlaybackStateCompat.STATE_PLAYING) {
+            wakeWebviewMagic();
+        }
+    }
+
     @Override
     public void onDestroy() {
         cleanUp();
+        this.binder = null;
         super.onDestroy();
     }
 
@@ -257,9 +284,33 @@ public class MusicControlsPlugin extends CordovaPlugin {
         }
     }
 
+    private void bindService(IBinder binder) {
+        this.binder = ((MusicControlsService.MusicControlsBinder) binder);
+        MusicControlsService service = this.binder.getService();
+        service.start(NOTIFICATION_ID, notification.buildNotification());
+    }
+
+    private void wakeWebviewMagic() {
+        Thread thread = new Thread() {
+            public void run() {
+                try {
+                    Thread.sleep(1000);
+                    cordova.getActivity().runOnUiThread(() -> {
+                        View view = webView.getView();
+                        view.dispatchWindowVisibilityChanged(View.VISIBLE);
+                    });
+                } catch (InterruptedException e) {
+                    // do nothing
+                }
+            }
+        };
+        thread.start();
+    }
+
     private void cleanUp() {
         notification.destroy();
         mMessageReceiver.stopListening();
         unregisterMediaButtonEvent();
+        this.binder.getService().stop();
     }
 }
